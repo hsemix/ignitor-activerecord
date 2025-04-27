@@ -1,16 +1,13 @@
 {
-    "name": "ignitor/queues",
-    "description": "Better Queues for CodeIgniter 4",
+    "name": "ignitor/activerecord",
+    "description": "Better ORM for CodeIgniter 4",
     "type": "library",
-    "keywords": ["framework", "CodeIgniter", "Queues"],
+    "keywords": ["framework", "CodeIgniter", "Database", "ORM", "ActiveRecord"],
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Igniter\\Queues\\": "src/"
-        },
-        "files": [
-            "src/helpers.php"
-        ]
+            "Igniter\\ActiveRecord\\": "src/"
+        }
     },
     "autoload-dev": {
         "psr-4": {
@@ -24,8 +21,7 @@
         }
     ],
     "require": {
-        "php": ">= 8.1",
-        "opis/closure": "^4.3"
+        "php": ">= 8.1"
     },
     "require-dev": {
         "phpunit/phpunit": "^7.5|^8.0",
