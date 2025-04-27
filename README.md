@@ -347,3 +347,39 @@ class Photo extends Model
         return $this->morphTo();
     }
 }
+```
+
+### Querying a record with a relationship (Lazy Loading)
+
+```php
+$user = User::query()->with('profile')->first();
+```
+
+### Querying a record with a relationship with conditions (Lazy Loading)
+
+```php
+$user = User::query()->where('name', 'John Doe')->first();
+
+// access the relationship
+$user->profile;
+```
+
+### Querying a record with a relationship (Eager Loading)
+
+```php
+$user = User::query()->where('name', 'John Doe')->with('profile')->first();
+
+// access the relationship
+$user->profile;
+```
+
+### Working with complex queries without the query builder
+
+```php
+$user = User::query()->where(function ($query) {
+    $query->where('name', 'John Doe');
+    $query->orWhere('email', 'john@example.com');
+})->first();
+
+//
+```
