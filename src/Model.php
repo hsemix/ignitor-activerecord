@@ -22,6 +22,7 @@ use Config\Database;
 use CodeIgniter\Database\BaseBuilder;
 use Igniter\ActiveRecord\Support\Str;
 use Igniter\ActiveRecord\Query\Builder;
+use Igniter\ActiveRecord\Support\Inflect;
 use Igniter\ActiveRecord\Relations\HasOne;
 use Igniter\ActiveRecord\Relations\HasMany;
 use Igniter\ActiveRecord\Relations\MorphTo;
@@ -247,7 +248,7 @@ abstract class Model
         }
 
         $calledClass = Str::snakeCase($calledClass);
-        // return Inflect::pluralize(strtolower($calledClass));
+        return Inflect::pluralize(Str::snakeCase($calledClass));
     }
 
     /**
@@ -784,7 +785,7 @@ abstract class Model
 	 *
      * @return MorphOne
 	 */
-    public function morphOne($class, $mergeable_name, $mergeable_type = null, $mergeable_id = null, $primaryKey = null)
+    public function morphOne(string $class, string $mergeable_name, ?string $mergeable_type = null, ?string $mergeable_id = null, ?string $primaryKey = null)
     {
 		$class = $this->returnAppropriateNamespace($class);
 
@@ -810,7 +811,7 @@ abstract class Model
 	 *
      * @return MorphMany
 	 */
-    public function morphMany($class, $mergeable_name, $mergeable_type = null, $mergeable_id = null, $primaryKey = null)
+    public function morphMany(string $class, string $mergeable_name, ?string $mergeable_type = null, ?string $mergeable_id = null, ?string $primaryKey = null)
     {
 		$class = $this->returnAppropriateNamespace($class);
 
@@ -834,7 +835,7 @@ abstract class Model
      * 
      * @return array
      */
-    protected function getMergeStrings($name, $type = null, $id = null)
+    protected function getMergeStrings(string $name, ?string $type = null, ?string $id = null)
     {
 		if (!$type) {
 			$type = $name."_type";
@@ -852,7 +853,7 @@ abstract class Model
      * 
      * @return string
      */
-    public function getMergeableClass()
+    public function getMergeableClass(): string
     {
 		return static::class;
     }
@@ -897,7 +898,7 @@ abstract class Model
      * 
      * @return mixed
      */
-    protected function buildNamespace()
+    protected function buildNamespace(): mixed
     {
         return $this->getFinder()->getNamespaceFromClass(static::class);
     }

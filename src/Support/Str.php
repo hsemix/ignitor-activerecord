@@ -35,6 +35,9 @@ class Str
      */    
     public static function snakeCase(string $value): string
     {
-        return strtolower(preg_replace('/[A-Z]/', '_$0', $value));
+        return preg_replace_callback('/(^|[a-z])([A-Z])/', function ($matches) {
+            return strtolower(strlen($matches[1]) ? $matches[1] . '_' . $matches[2] : $matches[2]);
+        },
+        $value);
     }    
 }   
