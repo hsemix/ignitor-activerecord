@@ -15,10 +15,13 @@ declare(strict_types=1);
 
 namespace Igniter\ActiveRecord;
 
+use Closure;
 use DateTime;
 use Exception;
+use ArrayAccess;
 use LogicException;
 use Config\Database;
+use JsonSerializable;
 use CodeIgniter\Database\BaseBuilder;
 use Igniter\ActiveRecord\Support\Str;
 use Igniter\ActiveRecord\Query\Builder;
@@ -33,7 +36,7 @@ use Igniter\ActiveRecord\Relations\MorphMany;
 use Igniter\ActiveRecord\Support\FileLocator;
 use Igniter\ActiveRecord\Relations\BelongsToMany;
 
-abstract class Model
+abstract class Model implements ArrayAccess, JsonSerializable
 {
     protected ?string $table = null;
     protected string $primaryKey = 'id';
@@ -45,6 +48,7 @@ abstract class Model
     public array $attributes = [];
     public array $casts = [];
     public array $bootable = [];
+    protected array $hidden = [];
 
     protected bool $protectFields = true;
 
@@ -157,6 +161,132 @@ abstract class Model
     }
 
     /**
+	 * Make the object act like an array when at access time
+	 *
+     * @param mixed $offset
+     * @param mixed $value
+     * 
+     * @return void
+	 */
+    public function offsetSet($offset, $value): void
+    {
+        if (is_null($offset)) {
+            $this->attributes[] = $value;
+        } else {
+            $this->attributes[$offset] = $value;
+        }
+    }
+
+    /**
+     * Determine whether an attribute exists on this model
+     * 
+     * @param $offset
+     * 
+     * @return boolean
+     */
+    public function offsetExists($offset): bool 
+    {
+        return isset($this->attributes[$offset]);
+    }
+
+    /**
+     * Unset an attribute if it doesn't exist
+     * 
+     * @param $offset
+     * 
+     * @return void
+     */
+    public function offsetUnset($offset): void 
+    {
+        unset($this->attributes[$offset]);
+    }
+
+    /**
+     * Get the value of an attribute from an array given its key
+     * 
+     * @param string $offset
+     * 
+     * @return mixed
+     */
+    public function offsetGet($offset): mixed 
+    {
+        return isset($this->attributes[$offset]) ? $this->attributes[$offset] : null;
+    }
+
+    /**
+     * Change an object to an array
+     * 
+     * @param null
+     * 
+     * @return mixed
+     */
+    public function toArray()
+    {
+        return $this->jsonSerialize();
+    }
+
+    /**
+     * Implement a json serializer
+     * 
+     * @return array
+     */
+    public function jsonSerialize(): mixed
+    {
+        $attributes = (array) $this->attributes;
+        if (!empty($this->jsonInclude)) {
+            foreach ($this->jsonInclude as $field) {
+                $attributes[$field] = $this->getAttribute($field);
+            }
+        }
+
+        if (!empty($this->relations)) {
+            foreach ($this->relations as $field => $relations) {
+                if (!is_null($relations)) {
+                    $attributes[$field] = $relations->toArray();
+                }
+            }
+        }
+    
+        $attributes = array_map(function($attribute) {
+            if (!is_array($attribute)) {
+                if (!is_object($attribute)) {
+                    if (!empty($attribute)) {
+                        $json_attribute = json_decode($attribute, true);
+                        if (json_last_error() == JSON_ERROR_NONE)
+                            return $json_attribute;
+                    }
+                    return $attribute;
+                } else {
+                    return (array)$attribute;
+                }
+            }
+            return $attribute;
+        }, $attributes);
+
+        return $this->removeHiddenFields($attributes);
+    }
+
+    /**
+     * Remove given fields from the model attributes when casted to array or json
+     * 
+     * @param array|[] $attributes
+     * 
+     * @return array $items
+     */
+    protected function removeHiddenFields(array $attributes = [])
+    {
+        $attributeKeys = array_keys($attributes);
+        $removedHiddenFields = array_diff($attributeKeys, $this->hidden);    
+        $items = [];
+        foreach ($attributes as $key => $value) {
+            if (in_array($key, $removedHiddenFields)) {
+                $items[$key] = $value;
+            }
+        }
+        return $items;
+    }
+
+    /**
      * Unset an attribute on the model.
      *
      * @param  string  $key
@@ -166,6 +296,18 @@ abstract class Model
     public function __unset(string $key)
     {
         unset($this->attributes[$key], $this->relations[$key]);
+    }
+
+    /**
+     * Change the model to a json string
+     * 
+     * @param int $options
+     * 
+     * @return string
+     */
+    public function toJson($options = 0)
+    {
+        return json_encode($this->jsonSerialize(), $options);
     }
 
 
@@ -279,10 +421,10 @@ abstract class Model
      * 
      * @return Builder
      */
-    public static function query()
+    public static function query(?string $rawQuery = null, array $bindings = [])
     {
         $model = new static();
-        return $model->newMainQueryBuilder($model);
+        return $model->newMainQueryBuilder($model, $rawQuery, $bindings);
     }
 
     /**
@@ -311,9 +453,15 @@ abstract class Model
      * 
      * @return Builder
      */
-    protected function newMainQueryBuilder(?Model $model = null)
+    protected function newMainQueryBuilder(?Model $model = null, ?string $rawQuery = null, array $bindings = [])
     {
-        return $this->queryable ?: new Builder(Database::connect(), $model);
+        $queryable = $this->queryable ?: new Builder(Database::connect(), $model);
+
+        if ($rawQuery) {
+            $queryable->setRawQuery($rawQuery, $bindings);
+        }
+        
+        return $queryable;
     }
 
     /**
@@ -643,11 +791,21 @@ abstract class Model
      * 
      * @return Model $model
      */
-    public function newFromQuery($attributes = [], ?array $bootable = null, array $items = [])
+    public function newFromQuery($attributes = [], array $bootable = [], array $items = [])
     {
         $model = $this->newInstance([], true);
         $model->setRawAttributes((array) $attributes, true);
         $model->attributes = (array)$attributes;
+
+        if (!is_null($bootable)) {
+            $this->bootable = $bootable;
+            foreach ($bootable as $start => $class) {
+                if ($start != 'pagination' && $start != 'paginator')
+                    $this->invokeBootable($start, $model, $items);
+                else 
+                    $model->$start = $class;
+            }
+        }
 
         return $model;
     }
@@ -655,8 +813,172 @@ abstract class Model
     /**
      * Relationships
      */
+    /**
+     * Invoke funtions or return strings or arrays that functions return
+     * 
+     * @param string $name
+     * @param Model $model
+     * @param array $items
+     * 
+     * @return void
+     */
+    protected function invokeBootable($name, $model, array $items)
+    {
+        $with = $this->bootable[$name];
+
+        // echo '<pre>';
+        // print_r($with);
+        // die();
+
+        if (is_numeric($name) === true) {
+            $name = $with;
+        }
+
+        if ($with instanceof Closure) {
+            $result = $this->processBootableClosure($with, $model, $name, $items);
+        } else {
+            $result = $this->processBootableMethod($with, $model, $name, $items);
+        }
+
+        if (is_array($result)) {
+            if (array_key_exists('field', $result) && array_key_exists('results', $result)) {
+                $name = $result['field'];
+                $result = $result['results'];
+            }
+        }
+    
+        if ($result instanceof Collection) {
+            $model->relations[$name] = $result;
+        } elseif($result instanceof Model) {
+            $model->relations[$name] = $result;
+        } else {
+            $model->{$name} = $result;
+            $model->bootable[$name] = $result;
+        }
+    }
 
      /**
+     * Process methods included in the bootable array
+     * 
+     * @param string $with
+     * @param Model $model
+     * @param string $name
+     * 
+     * @return mixed $result
+     */
+    protected function processBootableMethod($with, $model, $name, $items)
+    {
+        if (!is_array($with) && !is_object($with)) {
+            if (!$this->isNested($name, explode('.', $with)[0])) {
+                if (method_exists($model, $name)) {
+
+                    /** @var Relation $result */
+                    $result = $model->$name();
+
+                    if ($result instanceof Relation) {
+                        if ($result instanceof HasOne || $result instanceof BelongsTo || $result instanceof MorphOne) {
+                            $result = $result->first();
+                        } else {
+                            $result = $result->get();
+                        }
+                        
+                    }
+                } else {
+                    $result = $with;
+                }
+            } else {
+                $result = $this->processNestedWith($with, $model, $name, $items);
+            }
+        } else {
+            $result = $with;
+        }
+        
+        return $result;
+    }
+
+    /**
+     * Process closures included in the bootable array
+     * 
+     * @param string $with
+     * @param Model $model
+     * @param string $name
+     * 
+     * @return mixed
+     */
+    protected function processBootableClosure($with, $model, $name)
+    {
+        $result = call_user_func($with, $model);
+
+        if (is_null($result)) {
+            $result = $model->$name;
+        } else if (is_object($result)) {
+            $result = $result->get();
+        }
+
+        return $result;
+    }
+
+    /**
+     * Process nested relations passed in the with method
+     * 
+     * @param string $with
+     * @param Model $model
+     * @param string $name
+     * 
+     * @return mixed
+     */
+    protected function processNestedWith($with, $model, $name, $items)
+    {
+        $names = explode('.', $name);
+        if (method_exists($model, $names[0])) {
+            $method = $names[0];
+            /** @var Relation $result */
+            $result = $model->$method();
+
+            if ($result instanceof Relation) {
+                unset($names[0]);
+                $result = $result->with(implode('.', $names));//->get();
+
+                if ($result instanceof HasOne || $result instanceof BelongsTo || $result instanceof MorphOne) {
+                    $result = $result->first();
+                } else {
+                    $result = $result->get();
+                }
+
+            } else {
+                if (in_array($method, $this->virtualRelations)) {
+                    if ($result instanceof Model) {
+                        unset($names[0]);
+                        $result = $result->with(implode('.', $names))->get();
+                    } else if ($result instanceof Collection) {
+                        unset($names[0]);
+                        $result = isset($result[0]) ? $result[0]->with(implode('.', $names))->get() : $result;
+                    }
+                }
+            }
+            $result =  ['field' => $method, 'results' => $result];
+        } else {
+            $result = null;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Determine whether a relation is nested
+     * 
+     * @param string $relation
+     * 
+     * @return boolean
+     */
+    protected function isNested($name, $relation)
+    {
+        $dots = str_contains($name, '.');
+
+        return $dots && str_starts_with($name, $relation.'.');
+    }
+
+    /**
      * Define a one-to-many relationship.
      *
      * @param  string $class
@@ -956,6 +1278,18 @@ abstract class Model
     }
 
     /**
+     * Change the model to a string
+     * 
+     * @param null
+     * 
+     * @return void
+     */
+    public function __toString()
+    {
+        return $this->toJson();
+    }
+
+    /**
      * Build a find by any field in the database
      *
      * @param string $method
@@ -972,6 +1306,29 @@ abstract class Model
         }
 
         if (method_exists($this, $span = 'span' . ucfirst($method)))
+            return $query->callSpan($span, $parameters);
+        if (method_exists($query, $method))
+            return call_user_func_array([$query, $method], $parameters);
+        return null;
+    }
+
+    /**
+	 * Query the model statically and return a query builder
+	 *
+     * @param string $method
+     * @param array $parameters
+     * 
+     * @return Builder
+	 */
+    public static function __callStatic($method, $parameters) 
+    {
+        $instance = new static;
+        $query = $instance->newQueryBuilder();
+        if (preg_match('/^findBy(.+)$/', $method, $matches)) {
+            return $instance->where(Str::snakeCase($matches[1]), $parameters[0]);
+        }
+
+        if (method_exists($instance, $span = 'span' . ucfirst($method)))
             return $query->callSpan($span, $parameters);
         if (method_exists($query, $method))
             return call_user_func_array([$query, $method], $parameters);

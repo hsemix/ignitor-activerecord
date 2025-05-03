@@ -16,6 +16,7 @@ namespace Igniter\ActiveRecord\Query;
 use Closure;
 use Igniter\ActiveRecord\Model;
 use CodeIgniter\Database\RawSql;
+use CodeIgniter\Database\BaseResult;
 use Igniter\ActiveRecord\Collection;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\ConnectionInterface;
@@ -24,9 +25,12 @@ use CodeIgniter\Database\Exceptions\DatabaseException;
 
 class Builder
 {
+    protected array $boot = [];
     protected ?string $table;
     protected bool $escapeValue = true;
+    protected bool $isRaw = false;
 
+    protected ?BaseResult $rawResult = null;
     protected ?BaseBuilder $builder = null;
 
     public function __construct(protected ConnectionInterface $connection, protected Model $model)
@@ -274,6 +278,19 @@ class Builder
         return $this;
     }
 
+    public function setRawQuery(string $query, array $bindings = [])
+    {
+        $this->isRaw = true;
+
+        if (count($bindings) > 0) {
+            $this->rawResult = $this->connection->query($query, $bindings);
+        } else {
+            $this->rawResult = $this->connection->query($query);
+        }
+
+        return $this;
+    }
+
     // public function join(string $table, string $key, string $operator = '=', ?string $value = null): self
     // {
     //     if ($value) {
@@ -354,19 +371,23 @@ class Builder
         // $this->deletable();
         
         $models = $this->builder->select($columns)->get()->getResultArray(); 
+
+        if ($this->isRaw) {
+            $models = $this->rawResult->getResultArray();
+        }
         
-        $results = $this->makeModels($models);
+        $results = $this->makeModels($models, $this->boot);
         
         // Dispatch a "retrieved" event
 
         return $results;
     }
 
-    protected function makeModels(array $models): Collection
+    protected function makeModels(array $models, array $bootable = []): Collection
     {
         $result = [];
         foreach ($models as $item) {
-            $model = $this->getModel()->newFromQuery($item);
+            $model = $this->getModel()->newFromQuery($item, $bootable);
             $result[] = $model;
         }
         return new Collection($result);
@@ -384,7 +405,7 @@ class Builder
 
             if ($item !== null) {
 
-                $model = $this->getModel()->newFromQuery($item);
+                $model = $this->getModel()->newFromQuery($item, $this->boot);
                 return $model;
             }
         } else {
@@ -395,11 +416,15 @@ class Builder
         return null;
     }
 
-    public function first(array $columns = []): ?Model
+    public function first(array $columns = [])//: ?Model
     {
         // Dispatch a "selecting" event
         
         // $this->deletable();
+        if ($this->isRaw) {
+            return $this->getModel()->newFromQuery($this->rawResult->getRow(), $this->boot);
+        }
+        
         $item = $this->builder;
         if ($columns) {
             if (is_array($columns) === false) {
@@ -412,12 +437,40 @@ class Builder
 
         if ($item !== null) {
             
-            $model = $this->getModel()->newFromQuery($item);
+            $model = $this->getModel()->newFromQuery($item, $this->boot);
             // $model->setQuery($this);
             // Dispatch a "retrieved" event
             return $model;
         }
         return $item;
+    }
+
+    /**
+     * Format results and include whatever the user whats to be included in the results before being returned, 
+     * It could be a relation or a closure (computed field) or just a raw query or a string
+     * 
+     * @param array ...$relations
+     * 
+     * @return static
+     */
+    public function with($relations)
+    {
+        $bootable = [];
+        if (is_string($relations)) {
+            $relations = func_get_args();
+        }
+
+        foreach ($relations as $key => $value) {
+            if (is_string($value) === true && is_numeric($key) === true) {
+                $bootable[$value] = $value;
+            } else {
+                $bootable[$key] = $value;
+            }
+        }
+
+        $this->boot = $this->getModel()->bootable = $bootable;
+
+        return $this;
     }
 
     // public function toSql()
