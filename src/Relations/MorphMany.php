@@ -29,8 +29,10 @@ class MorphMany extends HasMany
 
     public function save(Model $model)
     {
-        $mergeClassBase = basename(str_replace('\\', '/', $this->mergeClass));
-        $model->setAttribute($this->getPlainMergeableType(), strtolower($mergeClassBase));
+        // $mergeClassBase = basename(str_replace('\\', '/', $this->mergeClass));
+        // $model->setAttribute($this->getPlainMergeableType(), strtolower($mergeClassBase));
+
+        $model->setAttribute($this->getPlainMergeableType(), $this->mergeClass);
         $model->setAttribute($this->getPlainMergeId(), $this->parent->{$this->parent->getPrimaryKey()});
         
         return parent::save($model);
