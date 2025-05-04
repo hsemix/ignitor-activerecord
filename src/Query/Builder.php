@@ -439,8 +439,23 @@ class Builder
 
         return $this;
     }
-    
-    /**
+    // {
+    //     $this->connection->query($query);
+    //     return $this;
+    // }
+
+    // public function join(string $table, string $key, string $operator = '=', ?string $value = null): self
+    // {
+    //     if ($value) {
+    //         $this->builder->join($table, $key . " " . $operator . " " . $value);
+    //     } else {
+    //         $this->builder->join($table, $key);
+    //     }
+    //     return $this;
+    // }
+
+
+        /**
      * Adds new LEFT JOIN statement to the current query.
      *
      * @param string|Raw|Closure|array $table
