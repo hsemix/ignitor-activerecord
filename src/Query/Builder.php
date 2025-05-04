@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace Igniter\ActiveRecord\Query;
 
 use Closure;
+use DateTime;
 use Igniter\ActiveRecord\Model;
 use CodeIgniter\Database\RawSql;
 use CodeIgniter\Database\BaseResult;
@@ -438,23 +439,8 @@ class Builder
 
         return $this;
     }
-    // {
-    //     $this->connection->query($query);
-    //     return $this;
-    // }
-
-    // public function join(string $table, string $key, string $operator = '=', ?string $value = null): self
-    // {
-    //     if ($value) {
-    //         $this->builder->join($table, $key . " " . $operator . " " . $value);
-    //     } else {
-    //         $this->builder->join($table, $key);
-    //     }
-    //     return $this;
-    // }
-
-
-        /**
+    
+    /**
      * Adds new LEFT JOIN statement to the current query.
      *
      * @param string|Raw|Closure|array $table
@@ -675,6 +661,51 @@ class Builder
 
     //     return $this->builder->getCompiledSelect();
     // }
+
+    /**
+     * Perform a delete on a record i.e. either permanent or soft
+     * 
+     * @param boolean|false $permanent
+     * 
+     * @return mixed
+     */
+    public function delete(bool $permanent = false)
+    {
+		if ($permanent === true) {
+			return $this->forceDelete();
+		}
+
+		return $this->softDelete();
+	}
+
+    /**
+     * Permanently Delete a record from a table
+     * 
+     * @return mixed
+     */
+    private function forceDelete()
+    {
+		return $this->builder->delete();
+	}
+
+    /**
+     * Soft delete a record i.e. create a deleted_at key and populate it with date
+     * 
+     * @return Model
+     */
+    private function softDelete()
+    {
+        
+		$time = (new DateTime('now'))->format('Y-m-d H:i:s');
+		
+		if ($this->checkTableField($this->getModel()->getTable(), $this->getModel()->getDeleteKey())) {
+            $this->update([$this->getModel()->getDeleteKey() => $time]);
+		} else {
+			// $this->createTableField($this->getModel()->getTable(), $this->getModel()->getDeleteKey());
+			$this->update([$this->getModel()->getDeleteKey() => $time]);
+		}
+		return $this->getModel();
+	}
 
     /**
      * Dynamically handle calls into the query instance.
