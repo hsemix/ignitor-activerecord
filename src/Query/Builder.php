@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace Igniter\ActiveRecord\Query;
 
 use Closure;
+use DateTime;
 use Igniter\ActiveRecord\Model;
 use CodeIgniter\Database\RawSql;
 use CodeIgniter\Database\BaseResult;
@@ -22,6 +23,7 @@ use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\ConnectionInterface;
 use Igniter\ActiveRecord\Exceptions\ModelException;
 use CodeIgniter\Database\Exceptions\DatabaseException;
+use Igniter\ActiveRecord\Exceptions\ModelNotFoundException;
 
 class Builder
 {
@@ -275,6 +277,30 @@ class Builder
         return $this->where("{$key} IS NOT NULL");
     }
 
+    public function limit(int $value, ?int $offset = null)
+    {
+        $this->builder->limit($value, $offset);
+
+        return $this;
+    }
+
+    public function skip(int $skip)
+    {
+        $this->builder->offSet($skip);
+
+        return $this;
+    }
+
+    public function take(int $amount)
+    {
+        return $this->limit($amount);
+    }
+
+    public function offset(int $offset)
+    {
+        return $this->skip($offset);
+    }
+
     public function join(string|array|Model $table, string $key, string $operator = '=', ?string $value = null, $type = 'inner')
     {
         if ($table instanceof Model) {
@@ -413,23 +439,8 @@ class Builder
 
         return $this;
     }
-    // {
-    //     $this->connection->query($query);
-    //     return $this;
-    // }
-
-    // public function join(string $table, string $key, string $operator = '=', ?string $value = null): self
-    // {
-    //     if ($value) {
-    //         $this->builder->join($table, $key . " " . $operator . " " . $value);
-    //     } else {
-    //         $this->builder->join($table, $key);
-    //     }
-    //     return $this;
-    // }
-
-
-        /**
+    
+    /**
      * Adds new LEFT JOIN statement to the current query.
      *
      * @param string|Raw|Closure|array $table
@@ -545,7 +556,7 @@ class Builder
         return null;
     }
 
-    public function first(array $columns = [])//: ?Model
+    public function first(array $columns = []): ?Model
     {
         // Dispatch a "selecting" event
         
@@ -571,6 +582,38 @@ class Builder
             // Dispatch a "retrieved" event
             return $model;
         }
+        return $item;
+    }
+
+    /**
+     * Execute the query and get the first result or call a callback.
+     *
+     * @param array  $columns
+     * @param \Closure|null  $callback
+     * @return mixed
+     */
+    public function firstOr(array $columns = ['*'], ?Closure $callback = null)
+    {
+        if ($columns instanceof Closure) {
+            $callback = $columns;
+
+            $columns = ['*'];
+        }
+
+        if (!is_null($model = $this->first($columns))) {
+            return $model;
+        }
+
+        return call_user_func($callback);
+    }
+
+    public function firstOrFail(array $columns = ['*'])
+    {
+        $item = $this->first($columns);
+        if ($item === null) {
+            throw new ModelNotFoundException(get_class($this->model) . ' was not found');
+        }
+
         return $item;
     }
 
@@ -618,6 +661,51 @@ class Builder
 
     //     return $this->builder->getCompiledSelect();
     // }
+
+    /**
+     * Perform a delete on a record i.e. either permanent or soft
+     * 
+     * @param boolean|false $permanent
+     * 
+     * @return mixed
+     */
+    public function delete(bool $permanent = false)
+    {
+		if ($permanent === true) {
+			return $this->forceDelete();
+		}
+
+		return $this->softDelete();
+	}
+
+    /**
+     * Permanently Delete a record from a table
+     * 
+     * @return mixed
+     */
+    private function forceDelete()
+    {
+		return $this->builder->delete();
+	}
+
+    /**
+     * Soft delete a record i.e. create a deleted_at key and populate it with date
+     * 
+     * @return Model
+     */
+    private function softDelete()
+    {
+        
+		$time = (new DateTime('now'))->format('Y-m-d H:i:s');
+		
+		if ($this->checkTableField($this->getModel()->getTable(), $this->getModel()->getDeleteKey())) {
+            $this->update([$this->getModel()->getDeleteKey() => $time]);
+		} else {
+			// $this->createTableField($this->getModel()->getTable(), $this->getModel()->getDeleteKey());
+			$this->update([$this->getModel()->getDeleteKey() => $time]);
+		}
+		return $this->getModel();
+	}
 
     /**
      * Dynamically handle calls into the query instance.
