@@ -73,12 +73,16 @@ $user = User::query()->orderBy('name', 'desc')->first(); // DESC
 
 ```php
 $user = User::query()->limit(10)->get();
+or
+$user = User::query()->take(10)->get();
 ```
 
 ### Querying a record with offset
 
 ```php
 $user = User::query()->offset(10)->get();
+or 
+$user = User::query()->skip(10)->get();
 ```
 
 ### Querying a record with group
@@ -121,13 +125,13 @@ $user = User::query()->crossJoin('posts', 'users.id', '=', 'posts.user_id')->get
 ### Querying a record with raw query
 
 ```php
-$user = User::raw('SELECT * FROM users WHERE name = ?', ['John Doe'])->get();
+$user = User::query('SELECT * FROM users WHERE name = ?', ['John Doe'])->get();
 ```
 
 ### Querying a record with raw query with bindings
 
 ```php
-$user = User::raw('SELECT * FROM users WHERE name = ?', ['John Doe'])->get();
+$user = User::query('SELECT * FROM users WHERE name = ?', ['John Doe'])->get();
 ```
 
 ### Querying a record with exists

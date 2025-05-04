@@ -22,6 +22,7 @@ use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\ConnectionInterface;
 use Igniter\ActiveRecord\Exceptions\ModelException;
 use CodeIgniter\Database\Exceptions\DatabaseException;
+use Igniter\ActiveRecord\Exceptions\ModelNotFoundException;
 
 class Builder
 {
@@ -273,6 +274,30 @@ class Builder
     public function whereNotNull(string $key)
     {
         return $this->where("{$key} IS NOT NULL");
+    }
+
+    public function limit(int $value, ?int $offset = null)
+    {
+        $this->builder->limit($value, $offset);
+
+        return $this;
+    }
+
+    public function skip(int $skip)
+    {
+        $this->builder->offSet($skip);
+
+        return $this;
+    }
+
+    public function take(int $amount)
+    {
+        return $this->limit($amount);
+    }
+
+    public function offset(int $offset)
+    {
+        return $this->skip($offset);
     }
 
     public function join(string|array|Model $table, string $key, string $operator = '=', ?string $value = null, $type = 'inner')
@@ -545,7 +570,7 @@ class Builder
         return null;
     }
 
-    public function first(array $columns = [])//: ?Model
+    public function first(array $columns = []): ?Model
     {
         // Dispatch a "selecting" event
         
@@ -571,6 +596,38 @@ class Builder
             // Dispatch a "retrieved" event
             return $model;
         }
+        return $item;
+    }
+
+    /**
+     * Execute the query and get the first result or call a callback.
+     *
+     * @param array  $columns
+     * @param \Closure|null  $callback
+     * @return mixed
+     */
+    public function firstOr(array $columns = ['*'], ?Closure $callback = null)
+    {
+        if ($columns instanceof Closure) {
+            $callback = $columns;
+
+            $columns = ['*'];
+        }
+
+        if (!is_null($model = $this->first($columns))) {
+            return $model;
+        }
+
+        return call_user_func($callback);
+    }
+
+    public function firstOrFail(array $columns = ['*'])
+    {
+        $item = $this->first($columns);
+        if ($item === null) {
+            throw new ModelNotFoundException(get_class($this->model) . ' was not found');
+        }
+
         return $item;
     }
 
