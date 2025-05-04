@@ -7,7 +7,7 @@ This is a database ActiveRecord Implementation for CodeIgniter 4.
 You can install the package via composer:
 
 ```bash
-composer require ignitor/activerecord:^1.0@dev
+composer require ignitor/activerecord
 ```
 
 ## Usage
