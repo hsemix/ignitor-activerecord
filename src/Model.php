@@ -417,6 +417,18 @@ abstract class Model implements ArrayAccess, JsonSerializable
     }
 
     /**
+     * Get the delete key of the table corresponding to this model
+     * 
+     * @param null
+     * 
+     * @return string
+     */
+    public function getDeleteKey()
+    {
+        return $this->deleteKey;
+    }
+
+    /**
      * Get a model QueryBuilder instance from the model
      * 
      * @return Builder

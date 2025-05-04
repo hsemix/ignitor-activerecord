@@ -29,6 +29,8 @@ class Builder
     protected ?string $table;
     protected bool $escapeValue = true;
     protected bool $isRaw = false;
+    protected bool $withTrashed = false;
+    protected bool $onlyTrashed = false;
 
     protected ?BaseResult $rawResult = null;
     protected ?BaseBuilder $builder = null;
@@ -263,6 +265,16 @@ class Builder
         return $this->where($key, 'NOT IN', $values);
     }
 
+    public function whereNull(string $key)
+    {
+        return $this->where("{$key} IS NULL");
+    }
+
+    public function whereNotNull(string $key)
+    {
+        return $this->where("{$key} IS NOT NULL");
+    }
+
     public function join(string|array|Model $table, string $key, string $operator = '=', ?string $value = null, $type = 'inner')
     {
         if ($table instanceof Model) {
@@ -278,6 +290,117 @@ class Builder
         return $this;
     }
 
+    /**
+     * Adds a GROUP BY clause to the query for the specified field.
+     *
+     * @param string $field The name of the field to group by.
+     * @return $this Returns the current instance for method chaining.
+     */
+    public function groupBy(string $field)
+    {
+        $this->builder->groupBy($field);
+
+        return $this;
+    }
+
+    public function orderBy(string $fields, string $defaultDirection = 'ASC')
+    {
+        $this->builder->orderBy($fields, $defaultDirection);
+
+        return $this;
+    }
+
+    // Aggregate Functions
+
+    public function count(string $field = '*', string $fieldAlias = 'count')
+    {
+        $this->deletable();
+        $this->builder->select($this->raw('COUNT(' . $field . ') AS ' . $fieldAlias));
+        $result = $this->builder->get()->getRow();
+        return (int)$result->{$fieldAlias};
+    }
+
+    public function avg($field, string $fieldAlias = 'avg')
+    {
+        $this->deletable();
+        $result = $this->builder->select($this->raw('AVG(' . $field . ') AS ' . $fieldAlias));
+        $result = $this->builder->get()->getRow();
+        return (int)$result->{$fieldAlias};
+    }
+
+    public function max(string $field, string $fieldAlias = 'max')
+    {
+        $this->deletable();
+        $result = $this->builder->select($this->raw('MAX(' . $field . ') AS ' . $fieldAlias));
+        $result = $this->builder->get()->getRow();
+        return (int)$result->{$fieldAlias};
+    }
+
+    public function min(string $field, string $fieldAlias = 'min')  
+    {
+        $this->deletable();
+        $result = $this->builder->select($this->raw('MIN(' . $field . ') AS ' . $fieldAlias));
+        $result = $this->builder->get()->getRow();
+        return (int)$result->{$fieldAlias};
+    }
+
+    public function sum(string $field, string $fieldAlias = 'sum')
+    {
+        $this->deletable();
+        $result = $this->builder->select($this->raw('SUM(' . $field . ') AS ' . $fieldAlias));
+        $result = $this->builder->get()->getRow();
+        return (int)$result->{$fieldAlias};
+    }
+
+    protected function checkTableField(string $table, string $field): bool
+    {
+        if ($this->connection->fieldExists($field, $table)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function deletable()
+    {
+        if ($this->checkTableField($this->getModel()->getTable(), $this->getModel()->getDeleteKey())) {
+            if ($this->withTrashed) {
+				
+			} elseif ($this->onlyTrashed) {
+				$this->whereNotNull($this->getModel()->getDeleteKey());
+			} else {
+				$this->whereNull($this->getModel()->getDeleteKey());
+			}
+        }
+        return $this;
+    }
+
+    /**
+     * Return all results including trashed ones
+     * 
+     * @param null
+     * 
+     * @return static
+     */
+    public function withTrashed()
+    {
+		$this->withTrashed = true;
+		return $this;
+	}
+
+    /**
+     * Return only Trashaed records i.e with deleted_at not null
+     * 
+     * @param null
+     * 
+     * @return static
+     */
+    public function onlyTrashed()
+    {
+		$this->onlyTrashed = true;
+		return $this;
+	}
+
     public function setRawQuery(string $query, array $bindings = [])
     {
         $this->isRaw = true;
@@ -290,6 +413,10 @@ class Builder
 
         return $this;
     }
+    // {
+    //     $this->connection->query($query);
+    //     return $this;
+    // }
 
     // public function join(string $table, string $key, string $operator = '=', ?string $value = null): self
     // {
@@ -368,7 +495,7 @@ class Builder
     {
         // Dispatch a "selecting" event
         
-        // $this->deletable();
+        $this->deletable();
         
         $models = $this->builder->select($columns)->get()->getResultArray(); 
 
@@ -399,6 +526,8 @@ class Builder
             $this->select($columns);
         }
 
+        $this->deletable();
+
         if (!is_array($ids)) {
             $this->where($this->model->getPrimaryKey(), $ids);
             $item = $this->builder->limit(1)->get()->getRow();
@@ -420,7 +549,7 @@ class Builder
     {
         // Dispatch a "selecting" event
         
-        // $this->deletable();
+        $this->deletable();
         if ($this->isRaw) {
             return $this->getModel()->newFromQuery($this->rawResult->getRow(), $this->boot);
         }
