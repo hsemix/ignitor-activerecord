@@ -251,7 +251,7 @@ abstract class Model implements ArrayAccess, JsonSerializable
             if (!is_array($attribute)) {
                 if (!is_object($attribute)) {
                     if (!empty($attribute)) {
-                        $json_attribute = json_decode($attribute, true);
+                        $json_attribute = json_decode((string)$attribute, true);
                         if (json_last_error() == JSON_ERROR_NONE)
                             return $json_attribute;
                     }
